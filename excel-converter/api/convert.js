@@ -1,5 +1,6 @@
-import multer from 'multer';
-import xlsx from 'xlsx';
+import formidable from "formidable";
+import xlsx from "xlsx";
+import fs from "fs";
 
 export const config = {
   api: {
@@ -7,26 +8,21 @@ export const config = {
   },
 };
 
-const upload = multer({ storage: multer.memoryStorage() });
+export default async function handler(req, res) {
+  const form = new formidable.IncomingForm();
 
-export default function handler(req, res) {
-  upload.single('file')(req, {}, err => {
+  form.parse(req, async (err, fields, files) => {
     if (err) {
-      return res.status(500).json({ error: 'Upload failed', details: err.message });
+      res.status(500).json({ error: "Failed to parse file" });
+      return;
     }
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+    const file = files.file;
+    const filepath = file[0].filepath;
+    const workbook = xlsx.readFile(filepath);
+    const sheetName = workbook.SheetNames[0];
+    const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-    try {
-      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const json = xlsx.utils.sheet_to_json(sheet, { defval: null });
-      return res.status(200).json({ data: json });
-    } catch (e) {
-      return res.status(500).json({ error: 'Conversion failed', details: e.message });
-    }
+    res.status(200).json(data);
   });
 }
