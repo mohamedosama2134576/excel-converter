@@ -1,42 +1,35 @@
-import formidable from "formidable";
-import fs from "fs";
+// api/convert.js
+import multer from "multer";
 import xlsx from "xlsx";
 
-// Disable default body parser so we can use formidable
 export const config = {
   api: {
     bodyParser: false,
   },
 };
 
+const upload = multer({ storage: multer.memoryStorage() });
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const form = formidable({ keepExtensions: true });
-
-  form.parse(req, async (err, fields, files) => {
+  upload.single("file")(req, {}, (err) => {
     if (err) {
-      console.error("Form parsing error:", err);
-      return res.status(500).json({ error: "Error parsing the file" });
+      return res.status(500).json({ error: "Upload failed", details: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
     try {
-      const file = files.file;
-      if (!file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      const filePath = file[0].filepath;
-      const workbook = xlsx.readFile(filePath);
-      const sheetName = workbook.SheetNames[0];
-      const jsonData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-
-      return res.status(200).json(jsonData);
-    } catch (err) {
-      console.error("Conversion error:", err);
-      return res.status(500).json({ error: "Failed to convert Excel file" });
+      const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = xlsx.utils.sheet_to_json(sheet, { defval: null });
+      res.status(200).json(json);
+    } catch (e) {
+      res.status(500).json({ error: "Conversion failed", details: e.message });
     }
   });
 }
