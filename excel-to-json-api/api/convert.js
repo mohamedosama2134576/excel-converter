@@ -1,23 +1,28 @@
-import express from 'express';
 import multer from 'multer';
 import xlsx from 'xlsx';
 
-const app = express();
+// Setup multer in memory
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.post('/api/convert', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
+// Wrap multer for Vercel
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
-  try {
-    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const json = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-    res.json(json);
-  } catch (err) {
-    res.status(500).json({ error: 'Conversion failed', details: err.message });
-  }
-});
+export default function handler(req, res) {
+  upload.single('file')(req, {}, function (err) {
+    if (err) return res.status(500).json({ error: 'File upload failed' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-export default app;
+    try {
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = xlsx.utils.sheet_to_json(sheet);
+      res.status(200).json(json);
+    } catch (e) {
+      res.status(500).json({ error: 'Conversion failed', details: e.message });
+    }
+  });
+}
